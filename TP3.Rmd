@@ -1,0 +1,291 @@
+---
+title: "TP3"
+author: "Moussa NGAMBE"
+date: "07/04/2023"
+output: html_document
+---
+
+# TP3 Calibrer/ évaluer une méthode et la comparer à d'autres
+
+## Partie 1 : Les objectifs
+* Savoir évaluer correctement les performances d'une méthode de classifiction.
+* Savoir utilser les approches par découpage apprentissage/ test répété et par validation croisée *(LOO et K-fods)*.
+
+#### 1. Chargement des données et packages class
+```{r}
+library(class)
+load("/Users/moussangambe/Desktop/R/AprentissageSupervise/TP3/simu_gauss2.rda")
+```
+
+#### 2. L'approche par découpage apprentissage/ test répété.
+a. Le code ci-dessous permet d’estimer le taux d’erreur de la méthode *knn* (avec k = 15 voisins) en découpant aléatoirement les 1000 données en 80% de données d’apprentissage et 20% de données test et en estimant le taux d’erreur par *le taux d’erreur test*.
+```{r}
+# Tirage aléatoire des indices des 800 observation 
+tr<-sample(1:nrow(X),800)
+# Echantillon d'apprentissage 
+Xtrain<-X[tr,]
+Ytrain<-Y[tr]
+# Echantillon test
+Xtest<-X[-tr,]
+Ytest<-Y[-tr]
+# Prédiction des 200 données test
+pred_test<-knn(Xtrain, Xtest, Ytrain, k=15)
+# erreur test pour 1 découpage
+sum(pred_test!=Ytest)/length(Ytest)
+```
+
+#### Commentaire :
+Si on execute le code ci-dessus plusieurs fois on constate que le taux d’erreur test est différent à chaque fois. Il faut donc tenir compte de cette dépendance du taux d’erreur test au découpage et répéter plusieurs fois la procédure de découpage apprentissage/test.
+
+b. Afin de tenir de la dépendance du taux d’erreur test au découpage, on répète *B = 100* fois la procédure. Le code ci-dessous effectue ainsi B = 100 découpages aléatoires et stocke les 100 valeurs de taux d’erreur test dans un vecteur de taille *B*. On peut alors calculer un taux d’erreur test moyen en faisant la moyenne des 100 valeurs obtenues avec les B = 100 découpages.
+
+```{r}
+B <- 100 # nombre de découpages
+err_test <- rep(NA,B) # vecteur pour stocker les B erreurs tests 
+for (b in 1:B)
+{
+tr <- sample(1:nrow(X), 800) 
+Xtrain <- X[tr,]
+Ytrain <- Y[tr]
+Xtest <- X[-tr,]
+Ytest <- Y[-tr]
+pred_test <- class::knn(Xtrain, Xtest, Ytrain, k=15) 
+err_test[b] <- sum(pred_test!=Ytest)/length(Ytest)
+}
+mean(err_test) # erreur test moyenne
+```
+
+#### Commentaire 
+Nous trouvons un taux d'erreur moyen autour de $18\%$.
+
+c. Visualiser la variabilité des taux d’erreurs test avec un boxplot.
+```{r}
+boxplot(err_test, ylab="Taux erreur test", ylim=c(0,0.4),
+        main=" 100 découpage d'apprentissage/test")
+```
+
+#### Commentaire 
+Le taux d'erreur test médiane est autour de $18\%$ avec une certaine variabilité autour de cette valeur.
+```{r}
+summary(err_test)
+```
+
+#### Commentaire
+On voit que certains découpages peuvent donner des erreurs test bien en dessous (ou au dessus) de cette valeur médiane. Conclure à partir d’un seul découpage par exemple que le taux d’erreur est de 15% serait très optimiste. Il est donc fortement recommandé de répéter les découpages pour obtenir une estimation plus stable du taux d’erreur à partir d’un taux d’erreur test moyen (ou médian).
+#### 3. L'approche par validation croisée 5-folds répétés
+a. Le code ci-dessous permet d’estimer le taux d’erreur de la méthode knn (k = 10 voisins) en découpant aléatoirement les 1000 données en 5 folds d’effectifs égaux et en estimant le taux d’erreur par le taux d’erreur de *validation croisée 5-fold*. 
+
+```{r}
+# vecteur des prediction (par validatin croisée) des 1000 données 
+pred_cv <- rep(NA, nrow(X))
+# indice d'appartenance des 1000 données aux 5 folds
+n_folds <- 5
+folds_i <- sample(rep(1:n_folds, length.out = nrow(X))) 
+# boucle sur les folds
+for (k in 1:n_folds) {
+test_i <- which(folds_i == k) 
+# indice des données du fold k
+Xtrain <- X[-test_i, ]
+Xtest <- X[test_i, ]
+Ytrain <- Y[-test_i]
+pred_cv[test_i] <- knn(Xtrain, Xtest, Ytrain, k=10) }
+# erreur de validation croisée pour 1 découpage en 5 folds
+sum(pred_cv!=Y)/length(Y)
+```
+
+#### Commentaire 
+on constate que le taux d’erreur de validation croisée est différent à chaque fois. On peut tenir compte de cette dépendance au découpage en 5 folds en répétant plusieurs fois la procédure de validation croisée 5-folds.
+#### Remarque:
+la différence entre l’approche par validation croisée K-folds et l’approche par découpage apprentissage/test est qu’en validation croisée, toutes les données sont utilisée pour l’apprentissage et pour la prédiction. En validation croisée 5-folds par exemple les données sont toutes utilisées 4 fois pour apprendre et une fois pour prédire. Donc toutes les données sont vues en apprentissage et en test mais aucune donnée n’est utilisée en même temps pour apprendre et prédire.
+
+b. Dans cette partie, nous allons tenir compte de la dépendance du taux d’erreur de validation au découpage en 5 folds, on peut répèter B = 100 fois la procédure.En effectuant B = 100 découpages en 5 folds et en conservant les 100 valeurs du taux d’erreur de validation dans un vecteur de taille B, puis calculer un taux d’erreur de validation croisée moyen en faisant la moyenne des 100 valeurs obtenues avec les B = 100 découpages en 5 folds.
+
+```{r}
+B <- 100 # nombre de découpage
+err_test <- rep(NA,B) # vecteur pour stocker les B erreurs tests
+# vecteur des prediction (par validation croisée) des 1000 données
+pred_cv <- rep(NA, nrow(X))
+# indice d'appartenance des 1000 données aux 5 folds
+n_folds <- 5
+
+for (b in 1:B) {
+folds_i <- sample(rep(1:n_folds, length.out = nrow(X))) 
+  # boucle sur les folds
+  for (k in 1:n_folds) {
+    test_i <- which(folds_i == k) # indice des données du fold k
+    Xtrain <- X[-test_i, ]
+    Xtest <- X[test_i, ]
+    Ytrain <- Y[-test_i]
+    pred_cv[test_i] <- class::knn(Xtrain, Xtest, Ytrain, k=10)
+    }
+  err_test[b] <- sum(pred_cv!=Y)/length(Y)
+}
+mean(err_test)
+```
+#### Commentaire 
+Nous trouvons un taux d'erreur test monyen autour de $19\%$.
+
+c. Visualions la variabilité des taux d’erreurs de validation croisée avec un boxplot.
+```{r}
+boxplot(err_test, ylab="Taux erreur test de validation croisé", ylim=c(0,0.4),main=" B=100 validation croisées 5-folds")
+```
+```{r}
+summary(err_test)
+```
+
+#### Commentaire
+On note que le taux d’erreur de validation médian est encore autour de 18% mais avec une variabilité autour de cette valeur moins grande qu’avec l’approche par apprentissage/test.
+
+#### 4. L'approche par validation croisée Loo (Leave One Out)
+Il s’agit de l’approche par validation croisée n-fold où n est le nombre d’observations (ici 1000). Il n’y a donc pas d’aléa lié à la mise en folds (car il n’y a qu’une seule manière de diviser n observations en n folds). Le code ci-dessous permet d’estimer le taux d’erreur de la méthode knn (k= 10 voisins) par le taux d’erreur de validation croisée LOO.
+```{r}
+# On utilise la fonction knn.cv pour prédire les données par validation LOO
+pred_loo <- knn.cv(X,Y, k=15)
+sum(pred_loo!=Y)/length(Y) # erreur de validation croisée LOO
+```
+
+#### Commentaire 
+On trouve un taux d’erreur de validation croisée LOO autour de 18%. Cette approche est recom- mandée pour des données avec peu d’observations. Sinon, il est préférable d’utiliser une des deux approches précédentes.
+
+#Partie 2 : On s’intéresse au jeu de données infarctus avec 101 observations et 8 variables de la partie 2 du TP 2:
+
+#### 1. Chargeons le jeu de données et le package class.
+```{r}
+library(class)
+load("/Users/moussangambe/Desktop/R/AprentissageSupervise/TP3/infarctus.rda")
+```
+#### 2.Estimez le taux d'erreur de la méthode *knn* avec les trois appoches suivantes:
+* par découpage apprentissage/test répété B fois,
+* par validation croisée 5-folds répétée B fois, 
+* par validation croisée LOO.
+
+##### a. Par découpage apprentissage/test répété B fois
+a. Nous allons estimer le taux d’erreur de la méthode *knn* (avec k = 15 voisins) en découpant aléatoirement les 101 données en 80% de données d’apprentissage et 20% de données test et en estimant le taux d’erreur par *le taux d’erreur test* et de tenir de la dépendance du taux d’erreur test au découpage, on répète *B = 100* fois la procédure. Le code ci-dessous effectue ainsi B = 100 découpages aléatoires et stocke les 100 valeurs de taux d’erreur test dans un vecteur de taille *B*. On peut alors calculer un taux d’erreur test moyen en faisant la moyenne des 100 valeurs obtenues avec les B = 100 découpages.
+
+```{r}
+B<-100
+n<-length(infarctus$PRONO) #tirage aléatoire 
+err_test<-rep(NA,B)
+
+for (b in 1:B){
+taille<-sample(1:n,70)
+#Données d'apprentissage
+Xtrain<-infarctus[taille,-1]
+Ytrain<-infarctus$PRONO[taille]
+#Données test
+Xtest<-infarctus[-taille,-1]
+Ytest<-infarctus$PRONO[-taille]
+prob<-rep(NA,nrow(Xtest))
+pred_test<-class::knn(Xtrain, Xtest, Ytrain, k=10, prob =TRUE)
+err_test[b] <- sum(pred_test!=Ytest)/length(Ytest)
+}
+# taux d'ereur moyen
+mean(err_test)
+```
+
+#### Commentaire :
+Nous avous un taux d'erreur test moyen autour de $16\%$.
+
+#### b. Par validation croisée 5-folds répétée B fois
+Nous allons calculerle taux d’erreur de validation au découpage en 5 folds en tenant compte de la dépendance du découpage, on peut répèter B = 100 fois la procédure.Puis calculer un taux d’erreur de validation croisée moyen en faisant la moyenne des 100 valeurs obtenues avec les B = 100 découpages en 5 folds.
+
+```{r}
+B <- 100 # nombre de découpage
+err_test <- rep(NA,B) # vecteur pour stocker les B erreurs tests
+# vecteur des prediction (par validation croisée) des 101 données
+pred_cv <- rep(NA, nrow(infarctus[,-1]))
+# indice d'appartenance des 101 données aux 5 folds
+n_folds <- 5
+
+for (b in 1:B) {
+folds_i <- sample(rep(1:n_folds, length.out = nrow(infarctus[,-1]))) 
+  # boucle sur les folds
+  for (k in 1:n_folds) {
+    test_i <- which(folds_i == k) # indice des données du fold k
+    Xtrain <- infarctus[-test_i,-1]
+    Xtest <- infarctus[test_i,-1 ]
+    Ytrain <- infarctus$PRONO[-test_i]
+    pred_cv[test_i] <- class::knn(Xtrain, Xtest, Ytrain, k=10)
+    }
+  err_test[b] <- sum(pred_cv!=infarctus$PRONO)/length(infarctus$PRONO)
+}
+mean(err_test)
+```
+
+#### Commentaire :
+Nous avous un taux d'erreur test moyen avec la validation croisée *5-folds* répété 100 foisn, qui est égal à $100\%$.
+
+#### b. Par validation croisée L00
+
+Le code ci-dessous permet d’estimer le taux d’erreur de la méthode knn (k= 10 voisins) par le taux d’erreur de validation croisée LOO.
+```{r}
+# On utilise la fonction knn.cv pour prédire les données par validation LOO
+pred_loo <- knn.cv(infarctus[,-1],infarctus$PRONO, k=15)
+sum(pred_loo!=Y)/length(Y) # erreur de validation croisée LOO
+```
+
+#### Commentaire 
+On obtient, un taux d'erreur test moyen d'environ $16\%$.
+On choisit une matrice de coût où le coût de mauvaise classification des cas de DECES en SURVIE est 10 fois plus grand que le coût de mauvaise classification des cas de SURVIE en DECES.
+#### Matrice de coût
+On choisit une matrice de coût où le coût de mauvaise classification des cas de DECES en SURVIE est 10 fois plus grand que le coût de mauvaise classification des cas de SURVIE en DECES.
+On introduit maintenant la matrice de coût suivante:
+$$C_{kl} = \begin{bmatrix}0 & 10\\
+1 & 0
+\end{bmatrix}$$
+où $C_{kl}$ est le coût de mauvaise classification d’une donnée de la classe $k$ dans la classe $l$.
+```{r}
+C <- matrix(c(0,10,1,0), nrow=2, ncol=2, byrow = TRUE)
+rownames(C) <- colnames(C) <- levels(infarctus$PRONO)
+C
+```
+On utilise alors la règle à posteriori minimum (règle de Baye) avec la méthode *knn*(pour estimer les probabilités à postériori) et on souhaite évaluer cette règle, pour cela estimons par validation croisée *5-folds* répétée B fois.
+
+```{r}
+B <- 100 # nombre de répétition
+err_cv <- rep(NA, B)
+tvp_cv <- rep(NA, B)
+tvn_cv <- rep(NA, B)
+Risque_empirique <- rep(NA, B)
+pred_cv <- rep(NA, nrow(infarctus))
+prob_cv <- rep(NA, nrow(infarctus))
+# Supprimer les lignes avec des valeurs manquantes
+
+infarctus <- infarctus[complete.cases(infarctus),]
+for (b in 1:B) {
+  #indice d'appartenance des 101 données aux 5-folds
+  n_folds<-5
+  folds_i <- sample(rep(1:n_folds, length.out = nrow(infarctus)))
+  #boucle sur les folds
+    for(k in 1:n_folds){
+    test_i <- which(folds_i == k) # indice des données du fold k
+    Xtrain <- infarctus[-test_i,-1]
+    Xtest <- infarctus[test_i,-1]
+    Ytrain <- infarctus$PRONO[-test_i]
+    prob_i <- rep(NA, length(test_i))
+    pred_i <- knn(Xtrain, Xtest, Ytrain, prob=TRUE, k=15)
+    prob_i[pred_i=="DECES"] <- attr(pred_i, "prob")[pred_i=="DECES"]
+    prob_i[pred_i=="SURVIE"] <- 1-attr(pred_i, "prob")[pred_i=="SURVIE"]
+    prob_cv[test_i] <- prob_i
+  }  
+  R1 <- C[2,1]*(1-prob_cv)
+  R2 <- C[1,2]*prob_cv
+  #prediction de la classe la moins risquée à postériori
+  pred_cv[R1 <R2] <- "DECES"
+  pred_cv[R2 <R1] <- "SURVIE"
+  tab <- table(infarctus$PRONO, pred_cv)
+  #taux de vrai positif ou sensibilité
+  tvp_cv<-tab[1,1]/(tab[1,1]+tab[1,2])
+  #taux de vrai négatif ou sensibilité
+  tvn_cv<-tab[2,2]/(tab[2,1]+tab[2,2])
+  err_cv<-(tab[1,2]*C[1,2]+tab[2,1]*C[2,1])/length(infarctus$PRONO)
+  #Risque empérique 
+  Risque_empirique[b]<-(tab[2,1]+tab[1,2])/length(infarctus$PRONO)
+}
+##Représentation graphique 
+vec <- data.frame(err_cv, tvp_cv, tvn_cv, Risque_empirique)
+boxplot(vec, ylim=c(0,1))
+```
+
+
+
